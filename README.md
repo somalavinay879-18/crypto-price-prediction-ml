@@ -1,99 +1,82 @@
-# Multi-Crypto Price Direction Prediction using Machine Learning
+# Crypto Price Direction Prediction
 
-##  Project Overview
-This project focuses on predicting the **short-term price direction (up or down)** of multiple cryptocurrencies using machine learning techniques.
+![CI](https://github.com/somalavinay879-18/crypto-price-prediction-ml/actions/workflows/ci.yml/badge.svg)
 
-Using historical market data from Bybit at **15-minute intervals**, the problem is formulated as a **binary classification task**, where the model predicts whether the next price movement will be upward or downward.
+Predicts whether the next 15-minute candle closes **higher or lower** for five crypto pairs on Bybit (BTC, ETH, DOGE, SOL, XRP), using 851,505 candles from March 2020 to January 2026.
 
+The focus is an honest evaluation: a strict time-based split, features that only use past data (checked by tests), and a comparison against a "do nothing clever" baseline.
 
-##  Objectives
-The main objectives of this project are:
-- To analyze cryptocurrency market behavior using historical data  
-- To build and compare multiple machine learning models  
-- To apply proper time-series validation techniques  
-- To understand the challenges of financial prediction  
+![Model accuracy](reports/accuracy.png)
 
- 
-## Dataset Description
-The dataset consists of historical price data for the following cryptocurrencies:
-- BTCUSDT  
-- ETHUSDT  
-- DOGEUSDT  
-- SOLUSDT  
-- XRPUSDT  
+## Results
 
-**Key characteristics:**
-- Timeframe: 15-minute intervals  
-- Features include: Open, High, Low, Close, Volume  
-- Data combined into a single dataset for multi-asset learning  
+Test set: the last 365 days (175,202 candles), never seen during training. 49.8% of test candles go up.
 
+| Model | Accuracy | Balanced accuracy | F1 | ROC-AUC |
+|---|---:|---:|---:|---:|
+| Random Forest | 52.55% | 52.55% | 0.515 | 0.536 |
+| XGBoost | 52.50% | 52.50% | 0.523 | 0.535 |
+| Logistic Regression | 52.11% | 52.06% | 0.439 | 0.530 |
+| Majority class (baseline) | 50.15% | 50.00% | 0.000 | 0.500 |
 
-##  Methodology
+**What this means**
 
-### 1. Data Preprocessing
-- Merged multiple CSV files into a unified dataset  
-- Converted timestamps into datetime format  
-- Checked and handled missing values and duplicates  
+- All three models beat the baseline by about 2–2.5 percentage points. On 175,202 test candles that difference is far larger than chance, so the features carry a small but real signal.
+- The tree models are only slightly better than logistic regression, so the signal is mostly simple (momentum and volatility), not complex interactions.
+- 52.5% is not a trading strategy. Fees, spread and slippage would likely remove an edge this small. The value of the project is the leakage-free method, not the accuracy.
 
+## Method
 
-### 2. Target Variable Construction
-A binary target variable was created:
-- `1` → Price increases in the next time step  
-- `0` → Price decreases in the next time step  
+1. **Data:** 15-minute OHLCV candles per pair, merged into one table, duplicates removed, sorted by pair and time.
+2. **Target:** `y = 1` if the next candle closes higher than the current one, otherwise `0`. Computed per pair, so one pair's prices never leak into another's.
+3. **Features** (all from the current and earlier candles of the same pair):
+   - 15-minute return and volume change
+   - 16 lags of each (the last 4 hours)
+   - rolling mean and standard deviation of returns over 16 and 64 candles (4 and 16 hours)
+   - one-hot pair indicator
+4. **Split:** train on everything before the last 365 days, test on the last 365 days. No shuffling.
+5. **Models:** majority class, logistic regression (scaled), random forest and XGBoost.
 
-Care was taken to **avoid data leakage** by ensuring that future information was not used in training.
+## Tests
 
+`pytest` runs 12 tests on small synthetic candles, so they run in CI without the real data. The most important ones check that:
 
-### 3. Feature Engineering
-To improve model performance, several features were engineered:
-- **Returns** (percentage price changes)  
-- **Lag features** (previous time steps)  
-- **Rolling statistics**:
-  - Moving averages (trend)
-  - Standard deviation (volatility)  
+- changing **future** prices does not change any feature computed earlier (no look-ahead)
+- lags never cross from one pair into another
+- the train period ends before the test period starts
+- the target and the future close are never used as inputs
 
-
-### 4. Train-Test Split
-Since this is time-series data:
-- A **time-based split** was used instead of random sampling  
-- The **last 365 days** of data were reserved for testing  
-- This ensures realistic evaluation and avoids look-ahead bias  
-
-
-##  Models Implemented
-The following machine learning models were trained and evaluated:
-
-- **Linear Regression** (baseline approach)  
-- **Logistic Regression**  
-- **Random Forest Classifier**  
-- **XGBoost Classifier**  
-
-
-##  Evaluation Metrics
-Model performance was evaluated using:
-- Accuracy  
-- F1 Score  
-- ROC-AUC Score  
-- Balanced Accuracy  
-
-
-##  Results & Discussion
-- Tree-based models such as **Random Forest** and **XGBoost** performed better than linear models  
-- Feature engineering significantly improved predictive performance  
-- Despite improvements, predicting financial markets remains challenging due to high volatility and noise  
-
-
-##  Tools and Technologies
-- Python  
-- Pandas & NumPy  
-- Scikit-learn  
-- XGBoost  
-- Matplotlib  
-
-##  How to Run the Project
+## Run it
 
 ```bash
-git clone https://github.com/your-username/ml_final_project.git
-cd ml_final_project
-pip install pandas numpy scikit-learn matplotlib xgboost
-jupyter notebook
+pip install -r requirements.txt
+python -m crypto_direction.run           # full run, writes reports/results.csv (about 15 minutes)
+python -m crypto_direction.run --fast    # smaller forests, about 2 minutes
+python -m crypto_direction.plot          # redraws reports/accuracy.png
+
+pip install -r requirements-dev.txt
+pytest -q
+```
+
+## Project structure
+
+```
+crypto_direction/
+  data.py       load and merge the candle files
+  features.py   target and past-only features
+  split.py      time-based split and model matrices
+  models.py     models and metrics
+  run.py        full experiment
+  plot.py       results chart
+tests/          12 tests on synthetic data
+reports/        results.csv and accuracy.png
+ML_Project_Bybit_Direction_XGB_RF.ipynb   original exploration notebook
+```
+
+## Next steps
+
+- Walk-forward evaluation (several test windows instead of one year)
+- Add order-book or funding-rate features
+- Estimate whether any edge survives trading fees
+
+Built with Python, pandas, scikit-learn, XGBoost and matplotlib.

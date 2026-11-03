@@ -1,0 +1,5 @@
+model,accuracy,balanced_accuracy,f1,roc_auc,fit_seconds
+Random Forest,0.5255,0.5255,0.5145,0.5363,797.9
+XGBoost,0.525,0.525,0.5225,0.5349,25.5
+Logistic Regression,0.5211,0.5206,0.4386,0.5301,1.7
+Majority class,0.5015,0.5,0.0,0.5,0.1
